@@ -11,7 +11,7 @@ from .encoding import fire_encode_184, append_block_tail, convolutional_encode, 
 from .interleave import interleave_456_to_4x114
 from .burst_builder import build_normal_burst, build_fcch_burst, build_sch_burst, get_tsc
 from .modulator import gmsk_modulate, modulate_burst_sequence
-from .wavefile import write_complex_iq
+from .wavefile import write_complex_iq, read_complex_iq, get_sample_info
 
 __all__ = [
     # Constants
@@ -31,5 +31,5 @@ __all__ = [
     # Modulation
     'gmsk_modulate', 'modulate_burst_sequence',
     # File IO
-    'write_complex_iq',
+    'write_complex_iq', 'read_complex_iq', 'get_sample_info',
 ]
