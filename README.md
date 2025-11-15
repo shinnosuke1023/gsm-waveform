@@ -1,15 +1,15 @@
 # GSM Waveform Generator
 
-A Python library for generating GSM broadcast channel waveforms (BCCH, FCCH, SCH) conforming to 3GPP/ETSI GSM specifications (TS 45.002, TS 45.003).
+A Python library for generating and demodulating GSM broadcast channel waveforms (BCCH, FCCH, SCH) conforming to 3GPP/ETSI GSM specifications (TS 45.002, TS 45.003).
 
 ## Features
 
 - **Complete GSM Baseband Implementation**
-  - FIRE code encoding (40-bit parity for 184-bit information)
-  - Convolutional encoding (rate 1/2, K=5)
-  - Block interleaving (456 bits → 4×114 bits)
+  - FIRE code encoding/decoding (40-bit parity for 184-bit information)
+  - Convolutional encoding/decoding (rate 1/2, K=5 with Viterbi decoder)
+  - Block interleaving/deinterleaving (456 bits ↔ 4×114 bits)
   - Normal Burst, FCCH, and SCH burst construction
-  - GMSK modulation (BT=0.3)
+  - GMSK modulation and demodulation (BT=0.3)
 
 - **Specification Compliant**
   - Follows GSM 05.02 and 05.03 standards
@@ -17,9 +17,11 @@ A Python library for generating GSM broadcast channel waveforms (BCCH, FCCH, SCH
   - Correct synchronization channel structure
   - Standard symbol rate (270.833 ksps)
 
-- **SDR Ready**
+- **Transmit and Receive Capabilities**
   - Generates complex IQ samples compatible with GNU Radio
-  - Ready for HackRF One, USRP, and other SDR platforms
+  - Demodulates and decodes received GSM signals
+  - Burst detection and synchronization
+  - Ready for HackRF One, USRP, RTL-SDR, and other SDR platforms
   - Supports standard file formats for SDR tools
 
 ## Installation
@@ -76,11 +78,26 @@ write_complex_iq("output.cfile", iq)
 
 See the `examples/` directory for complete examples:
 
+### Generate a waveform:
 ```bash
 python examples/generate_bcch_waveform.py
 ```
 
 This generates a complete BCCH frame with FCCH, SCH, and 4 normal bursts.
+
+### Demodulate a waveform:
+```bash
+python examples/demodulate_bcch_waveform.py bcch_waveform.cfile 0
+```
+
+This reads and demodulates a BCCH waveform file, detecting bursts and decoding information.
+
+### End-to-end test:
+```bash
+python examples/test_end_to_end.py
+```
+
+This tests the complete encode→modulate→demodulate→decode pipeline.
 
 ## Testing
 
@@ -98,12 +115,17 @@ pytest --cov=gsm_waveform tests/
 
 ## Module Overview
 
+### Transmit Chain
 - **`constants.py`** - GSM constants and training sequences
 - **`encoding.py`** - FIRE code and convolutional encoding
 - **`interleave.py`** - Block interleaving for control channels
 - **`burst_builder.py`** - Normal Burst, FCCH, SCH construction
 - **`modulator.py`** - GMSK modulation (BT=0.3)
 - **`wavefile.py`** - IQ file I/O utilities
+
+### Receive Chain
+- **`demodulator.py`** - GMSK demodulation and burst detection
+- **`decoder.py`** - Viterbi decoding, deinterleaving, and FIRE code verification
 
 ## Usage with SDR Tools
 

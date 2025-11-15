@@ -14,7 +14,8 @@ from .constants import (
 
 
 def gmsk_demodulate(iq: np.ndarray, 
-                   osr: int = OSR_DEFAULT) -> np.ndarray:
+                   osr: int = OSR_DEFAULT,
+                   return_all_phases: bool = False) -> np.ndarray:
     """GMSK demodulate IQ samples to bit sequence.
     
     Uses frequency discriminator approach:
@@ -26,9 +27,11 @@ def gmsk_demodulate(iq: np.ndarray,
     Args:
         iq: Complex IQ samples
         osr: Oversampling ratio (samples per symbol)
+        return_all_phases: If True, returns multiple phase-shifted versions
         
     Returns:
         Demodulated bit sequence (0/1)
+        If return_all_phases=True, returns array with shape (osr, n_bits)
     """
     # Ensure complex type
     iq = iq.astype(np.complex128)
@@ -37,26 +40,39 @@ def gmsk_demodulate(iq: np.ndarray,
     # phase_diff = angle(s[n] * conj(s[n-1]))
     phase_diff = np.angle(iq[1:] * np.conj(iq[:-1]))
     
-    # Apply low-pass filtering to smooth out noise
-    # Use a simple moving average
-    if len(phase_diff) > osr:
-        window = np.ones(osr) / osr
-        phase_diff_filtered = np.convolve(phase_diff, window, mode='same')
-    else:
-        phase_diff_filtered = phase_diff
-    
     # Normalize by sample period to get frequency deviation
     # For GMSK with h=0.5, frequency deviation is ±0.25 * symbol_rate
     # Phase difference per sample should be ±π/2/osr for ±1 bits
-    normalized = phase_diff_filtered * osr / (np.pi / 2)
+    normalized = phase_diff * osr / (np.pi / 2)
     
-    # Downsample to symbol rate (take samples at symbol centers)
-    # Account for filter delay and sample at appropriate points
-    # Add delay compensation for the Gaussian filter used in modulation
-    delay = GAUSSIAN_FILTER_SPAN * osr // 2
-    start_idx = delay
+    if return_all_phases:
+        # Return all possible phase alignments
+        phases = []
+        for phase_offset in range(osr):
+            start_idx = phase_offset
+            if start_idx < len(normalized):
+                symbols = normalized[start_idx::osr]
+                bits = (symbols > 0).astype(np.uint8)
+                phases.append(bits)
+        
+        # Pad to same length
+        max_len = max(len(p) for p in phases)
+        for i in range(len(phases)):
+            if len(phases[i]) < max_len:
+                phases[i] = np.pad(phases[i], (0, max_len - len(phases[i])), 'constant')
+        
+        return np.array(phases)
     
-    # Ensure we don't go out of bounds
+    # Single best phase
+    # Start at sample corresponding to first symbol center
+    # The Gaussian filter has a delay of span/2 symbols
+    delay_symbols = GAUSSIAN_FILTER_SPAN // 2
+    delay_samples = delay_symbols * osr
+    
+    # Additional half-symbol delay to sample at symbol center
+    start_idx = delay_samples + osr // 2
+    
+    # Make sure we don't go out of bounds
     if start_idx >= len(normalized):
         start_idx = osr // 2
     
