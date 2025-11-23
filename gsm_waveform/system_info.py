@@ -90,26 +90,45 @@ def encode_system_information_type3(
         neighbor_cells = []
     
     # Validate input parameters to prevent out-of-range values
-    assert 0 <= cell_identity <= 65535, f"cell_identity must be 0-65535, got {cell_identity}"
-    assert 0 <= location_area_code <= 65535, f"location_area_code must be 0-65535, got {location_area_code}"
-    assert 0 <= mobile_country_code <= 999, f"mobile_country_code must be 0-999, got {mobile_country_code}"
-    assert 0 <= mobile_network_code <= 999, f"mobile_network_code must be 0-999, got {mobile_network_code}"
-    assert 0 <= arfcn <= 1023, f"arfcn must be 0-1023, got {arfcn}"
-    assert 0 <= bsic <= 63, f"bsic must be 0-63, got {bsic}"
-    assert 0 <= bs_ag_blks_res <= 7, f"bs_ag_blks_res must be 0-7, got {bs_ag_blks_res}"
-    assert 0 <= ccch_conf <= 7, f"ccch_conf must be 0-7, got {ccch_conf}"
-    assert 0 <= bs_pa_mfrms <= 9, f"bs_pa_mfrms must be 0-9, got {bs_pa_mfrms}"
-    assert 0 <= t3212 <= 255, f"t3212 must be 0-255, got {t3212}"
-    assert 0 <= dtx <= 3, f"dtx must be 0-3, got {dtx}"
-    assert 0 <= radio_link_timeout <= 31, f"radio_link_timeout must be 0-31, got {radio_link_timeout}"
-    assert 0 <= cell_reselect_hysteresis <= 7, f"cell_reselect_hysteresis must be 0-7, got {cell_reselect_hysteresis}"
-    assert 0 <= ms_txpwr_max_cch <= 31, f"ms_txpwr_max_cch must be 0-31, got {ms_txpwr_max_cch}"
-    assert 0 <= rxlev_access_min <= 63, f"rxlev_access_min must be 0-63, got {rxlev_access_min}"
-    assert 0 <= max_retrans <= 3, f"max_retrans must be 0-3, got {max_retrans}"
-    assert 0 <= tx_integer <= 15, f"tx_integer must be 0-15, got {tx_integer}"
-    assert 0 <= acc <= 0xFFFF, f"acc must be 0-65535, got {acc}"
+    if not (0 <= cell_identity <= 65535):
+        raise ValueError(f"cell_identity must be 0-65535, got {cell_identity}")
+    if not (0 <= location_area_code <= 65535):
+        raise ValueError(f"location_area_code must be 0-65535, got {location_area_code}")
+    if not (0 <= mobile_country_code <= 999):
+        raise ValueError(f"mobile_country_code must be 0-999, got {mobile_country_code}")
+    if not (0 <= mobile_network_code <= 999):
+        raise ValueError(f"mobile_network_code must be 0-999, got {mobile_network_code}")
+    if not (0 <= arfcn <= 1023):
+        raise ValueError(f"arfcn must be 0-1023, got {arfcn}")
+    if not (0 <= bsic <= 63):
+        raise ValueError(f"bsic must be 0-63, got {bsic}")
+    if not (0 <= bs_ag_blks_res <= 7):
+        raise ValueError(f"bs_ag_blks_res must be 0-7, got {bs_ag_blks_res}")
+    if not (0 <= ccch_conf <= 7):
+        raise ValueError(f"ccch_conf must be 0-7, got {ccch_conf}")
+    if not (0 <= bs_pa_mfrms <= 9):
+        raise ValueError(f"bs_pa_mfrms must be 0-9, got {bs_pa_mfrms}")
+    if not (0 <= t3212 <= 255):
+        raise ValueError(f"t3212 must be 0-255, got {t3212}")
+    if not (0 <= dtx <= 3):
+        raise ValueError(f"dtx must be 0-3, got {dtx}")
+    if not (0 <= radio_link_timeout <= 31):
+        raise ValueError(f"radio_link_timeout must be 0-31, got {radio_link_timeout}")
+    if not (0 <= cell_reselect_hysteresis <= 7):
+        raise ValueError(f"cell_reselect_hysteresis must be 0-7, got {cell_reselect_hysteresis}")
+    if not (0 <= ms_txpwr_max_cch <= 31):
+        raise ValueError(f"ms_txpwr_max_cch must be 0-31, got {ms_txpwr_max_cch}")
+    if not (0 <= rxlev_access_min <= 63):
+        raise ValueError(f"rxlev_access_min must be 0-63, got {rxlev_access_min}")
+    if not (0 <= max_retrans <= 3):
+        raise ValueError(f"max_retrans must be 0-3, got {max_retrans}")
+    if not (0 <= tx_integer <= 15):
+        raise ValueError(f"tx_integer must be 0-15, got {tx_integer}")
+    if not (0 <= acc <= 0xFFFF):
+        raise ValueError(f"acc must be 0-65535, got {acc}")
     for i, ncell in enumerate(neighbor_cells):
-        assert 0 <= ncell <= 1023, f"neighbor_cells[{i}] must be 0-1023, got {ncell}"
+        if not (0 <= ncell <= 1023):
+            raise ValueError(f"neighbor_cells[{i}] must be 0-1023, got {ncell}")
     
     # Initialize 184-bit array (23 bytes)
     info_bits = np.zeros(184, dtype=np.uint8)
