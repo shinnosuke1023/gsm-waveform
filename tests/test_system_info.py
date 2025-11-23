@@ -197,7 +197,6 @@ class TestEndToEndPipeline:
         )
         
         # Encode System Information
-        # Note: cell_identity and location_area_code are 16-bit fields (0-65535)
         info_bits = encode_system_information_type3(
             cell_identity=54321,
             location_area_code=555,
