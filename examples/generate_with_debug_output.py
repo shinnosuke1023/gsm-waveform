@@ -19,7 +19,6 @@ from gsm_waveform import (
     build_fcch_burst,
     build_sch_burst,
     get_tsc,
-    gmsk_modulate,
     modulate_burst_sequence,
     write_complex_iq,
     FS_GEN

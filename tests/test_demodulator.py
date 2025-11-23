@@ -1,7 +1,6 @@
 """Tests for GSM GMSK demodulator"""
 
 import numpy as np
-import pytest
 from gsm_waveform.demodulator import (
     gmsk_demodulate,
     correlate_sequence,

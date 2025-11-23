@@ -157,7 +157,7 @@ class TestFireDecoding:
         decoded_info, valid = fire_decode_224(encoded)
         
         assert len(decoded_info) == 184
-        assert valid == True
+        assert valid
         assert np.array_equal(decoded_info, info)
     
     def test_fire_decode_random(self):
@@ -168,7 +168,7 @@ class TestFireDecoding:
         decoded_info, valid = fire_decode_224(encoded)
         
         assert len(decoded_info) == 184
-        assert valid == True
+        assert valid
         assert np.array_equal(decoded_info, info)
     
     def test_fire_decode_corrupted(self):
@@ -210,7 +210,7 @@ class TestBCCHPipeline:
         decoded_info, valid = decode_bcch_pipeline(data_bursts)
         
         assert len(decoded_info) == 184
-        assert valid == True
+        assert valid
         # Should match original
         assert np.array_equal(decoded_info, info)
     
@@ -225,7 +225,7 @@ class TestBCCHPipeline:
         # Decode
         decoded_info, valid = decode_bcch_pipeline(data_bursts)
         
-        assert valid == True
+        assert valid
         assert np.array_equal(decoded_info, info)
     
     def test_bcch_pipeline_all_ones(self):
@@ -239,7 +239,7 @@ class TestBCCHPipeline:
         # Decode
         decoded_info, valid = decode_bcch_pipeline(data_bursts)
         
-        assert valid == True
+        assert valid
         assert np.array_equal(decoded_info, info)
 
 
@@ -257,7 +257,7 @@ class TestSCHDecoding:
         # Decode
         dec_bsic, dec_fn, valid = decode_sch_39bits(sch39)
         
-        assert valid == True
+        assert valid
         assert dec_bsic == bsic
         # Frame number might not match exactly due to encoding/decoding
         # but should be close
@@ -269,7 +269,7 @@ class TestSCHDecoding:
             sch39 = build_sch_39bits(bsic, 0)
             dec_bsic, dec_fn, valid = decode_sch_39bits(sch39)
             
-            assert valid == True
+            assert valid
             assert dec_bsic == bsic
     
     def test_sch_decode_corrupted(self):

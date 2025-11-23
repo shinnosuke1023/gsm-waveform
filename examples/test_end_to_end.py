@@ -121,7 +121,8 @@ def test_end_to_end():
                             
                             if similarity > 0.99:
                                 break
-                except:
+                except Exception:
+                    # Decoding may fail for some offsets due to invalid alignment
                     pass
         
         if best_similarity > 0.99:

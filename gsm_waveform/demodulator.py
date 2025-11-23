@@ -5,11 +5,10 @@ for GSM broadcast channels.
 """
 
 import numpy as np
-from scipy import signal
 from typing import Tuple, List, Optional
 from .constants import (
-    SYM_RATE, OSR_DEFAULT, BT, GAUSSIAN_FILTER_SPAN,
-    TSC_TABLE, SCH_TRAINING_SEQ, TRAINING_LEN_NB
+    OSR_DEFAULT, GAUSSIAN_FILTER_SPAN,
+    TSC_TABLE, SCH_TRAINING_SEQ
 )
 
 
@@ -157,8 +156,10 @@ def extract_normal_burst_data(burst_bits: np.ndarray) -> Tuple[np.ndarray, np.nd
     assert len(burst_bits) >= 148, f"Expected at least 148 bits, got {len(burst_bits)}"
     
     # Extract data fields (skip tail and stealing bits)
-    left_data = burst_bits[3:60]    # Skip 3 tail bits, take 57 data bits
-    right_data = burst_bits[87:144]  # Skip TSC (26) + stealing (2), take 57 data bits
+    # Burst structure: TAIL(3) | DATA(57) | S(1) | TSC(26) | S(1) | DATA(57) | TAIL(3)
+    # Positions:        0-2      3-59       60     61-86      87     88-144     145-147
+    left_data = burst_bits[3:60]    # Positions 3-59: 57 data bits
+    right_data = burst_bits[88:145]  # Positions 88-144: 57 data bits (skip TSC + 2 stealing bits)
     
     return left_data, right_data
 

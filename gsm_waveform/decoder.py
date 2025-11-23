@@ -26,7 +26,6 @@ def deinterleave_4x114_to_456(bursts: list) -> np.ndarray:
         assert len(burst) == 114, f"Burst {i} has {len(burst)} bits, expected 114"
     
     M = 4    # Number of bursts
-    N = 114  # Bits per burst
     
     # Create matrix from bursts (each burst is a row)
     mat = np.array(bursts, dtype=np.uint8)
@@ -251,7 +250,7 @@ def decode_sch_39bits(sch39: np.ndarray) -> Tuple[Optional[int], Optional[int], 
     # Extract fields
     info25 = sch39[:25]
     received_crc = sch39[25:35]
-    tail = sch39[35:]
+    # tail bits at sch39[35:] are not used for decoding
     
     # Verify CRC
     from .burst_builder import compute_sch_crc10

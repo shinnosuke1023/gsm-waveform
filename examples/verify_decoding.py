@@ -18,14 +18,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from gsm_waveform import (
     # Encoding
     fire_encode_184,
-    append_block_tail,
     convolutional_encode,
     make_bcch_encoded_456,
     interleave_456_to_4x114,
     build_sch_39bits,
     # Decoding
     fire_decode_224,
-    remove_tail_bits,
     viterbi_decode,
     deinterleave_4x114_to_456,
     decode_bcch_pipeline,

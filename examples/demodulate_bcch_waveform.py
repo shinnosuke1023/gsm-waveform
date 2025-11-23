@@ -5,7 +5,6 @@ This script demonstrates how to read a BCCH waveform file,
 demodulate it, and decode the information.
 """
 
-import numpy as np
 import sys
 import os
 
