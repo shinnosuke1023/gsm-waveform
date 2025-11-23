@@ -83,26 +83,50 @@ def main():
     print("=" * 60)
     print()
     
-    # Create System Information Type 3 message with real GSM parameters
-    print("Creating System Information Type 3 message...")
+    # Create System Information Type 3 message with GSM 04.08 compliant parameters
+    print("Creating System Information Type 3 message (GSM 04.08)...")
     
     # Define network parameters
-    cell_identity = 12345       # Base Station ID / Cell Identity
-    location_area_code = 100    # Location Area Code
-    arfcn = 975                 # ARFCN (e.g., GSM-900 downlink)
-    neighbor_cells = [980, 985, 990, 1000]  # Neighbor cell ARFCNs
+    cell_identity = 12345             # Cell Identity
+    location_area_code = 100          # Location Area Code
+    mobile_country_code = 440         # MCC (Japan example: 440)
+    mobile_network_code = 10          # MNC (example: 10)
+    arfcn = 975                       # ARFCN (e.g., GSM-900 downlink)
+    neighbor_cells = [980, 985]  # Neighbor cell ARFCNs (max 2 due to 184-bit limit)
     
-    print(f"  Cell Identity (Base Station ID): {cell_identity}")
+    print(f"  Cell Identity: {cell_identity}")
     print(f"  Location Area Code: {location_area_code}")
+    print(f"  MCC: {mobile_country_code}, MNC: {mobile_network_code}")
     print(f"  ARFCN: {arfcn}")
     print(f"  Neighbor Cells: {neighbor_cells}")
     
-    # Encode System Information
+    # Encode System Information with GSM 04.08 compliant parameters
     info_bits = encode_system_information_type3(
         cell_identity=cell_identity,
         location_area_code=location_area_code,
+        mobile_country_code=mobile_country_code,
+        mobile_network_code=mobile_network_code,
         arfcn=arfcn,
-        neighbor_cells=neighbor_cells
+        neighbor_cells=neighbor_cells,
+        # Use default values for other GSM 04.08 parameters
+        att=True,
+        bs_ag_blks_res=1,
+        ccch_conf=1,
+        bs_pa_mfrms=2,
+        t3212=0,
+        pwrc=False,
+        dtx=2,
+        radio_link_timeout=4,
+        cell_reselect_hysteresis=2,
+        ms_txpwr_max_cch=0,
+        rxlev_access_min=0,
+        neci=True,
+        acs=False,
+        max_retrans=1,
+        tx_integer=3,
+        cell_bar_access=False,
+        re=False,
+        acc=0xFFFF
     )
     
     # Generate BCCH frame

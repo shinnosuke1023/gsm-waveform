@@ -81,7 +81,9 @@ class TestSystemInformationType3Encoding:
     
     def test_encode_with_neighbor_cells(self):
         """Test encoding with neighbor cells"""
-        neighbors = [980, 985, 990, 1000]
+        # Limited to 2 neighbors due to 184-bit payload constraint
+        # (18 bytes GSM fields + 1.25 bytes ARFCN/count = 2.6 bytes for neighbors)
+        neighbors = [980, 985]
         info_bits = encode_system_information_type3(neighbor_cells=neighbors)
         
         decoded = decode_system_information_type3(info_bits)
@@ -93,24 +95,24 @@ class TestSystemInformationType3Encoding:
             cell_identity=12345,
             location_area_code=100,
             arfcn=975,
-            neighbor_cells=[980, 985, 990]
+            neighbor_cells=[980, 985]
         )
         
         decoded = decode_system_information_type3(info_bits)
         assert decoded['cell_identity'] == 12345
         assert decoded['location_area_code'] == 100
         assert decoded['arfcn'] == 975
-        assert decoded['neighbor_cells'] == [980, 985, 990]
+        assert decoded['neighbor_cells'] == [980, 985]
     
     def test_encode_max_neighbor_cells(self):
         """Test encoding with maximum neighbor cells"""
-        # Create more than 16 neighbors, should be truncated
+        # Create more than 2 neighbors (max that fits in 184 bits with full GSM fields)
         neighbors = list(range(1, 20))
         info_bits = encode_system_information_type3(neighbor_cells=neighbors)
         
         decoded = decode_system_information_type3(info_bits)
-        # Should only have first 16
-        assert len(decoded['neighbor_cells']) <= 16
+        # Should be truncated to fit in available space (max 2 neighbors)
+        assert len(decoded['neighbor_cells']) <= 2
 
 
 class TestSystemInformationType3Decoding:
@@ -137,12 +139,12 @@ class TestSystemInformationType3Decoding:
     
     def test_decode_roundtrip(self):
         """Test encoding then decoding"""
-        # Create message
+        # Create message (max 2 neighbors)
         info_bits = encode_system_information_type3(
             cell_identity=54321,
             location_area_code=200,
             arfcn=123,
-            neighbor_cells=[100, 200, 300]
+            neighbor_cells=[100, 200]
         )
         
         # Decode
@@ -153,7 +155,7 @@ class TestSystemInformationType3Decoding:
         assert decoded['cell_identity'] == 54321
         assert decoded['location_area_code'] == 200
         assert decoded['arfcn'] == 123
-        assert decoded['neighbor_cells'] == [100, 200, 300]
+        assert decoded['neighbor_cells'] == [100, 200]
 
 
 class TestSystemInformationFormatting:
@@ -196,12 +198,12 @@ class TestEndToEndPipeline:
             decode_bcch_pipeline
         )
         
-        # Encode System Information
+        # Encode System Information (max 2 neighbors due to 184-bit constraint)
         info_bits = encode_system_information_type3(
             cell_identity=54321,
             location_area_code=555,
             arfcn=888,
-            neighbor_cells=[900, 910, 920, 930]
+            neighbor_cells=[900, 910]
         )
         
         # Run through BCCH encoding
@@ -220,4 +222,4 @@ class TestEndToEndPipeline:
         assert decoded_si['cell_identity'] == 54321
         assert decoded_si['location_area_code'] == 555
         assert decoded_si['arfcn'] == 888
-        assert decoded_si['neighbor_cells'] == [900, 910, 920, 930]
+        assert decoded_si['neighbor_cells'] == [900, 910]

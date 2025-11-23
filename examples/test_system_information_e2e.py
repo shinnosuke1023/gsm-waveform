@@ -37,15 +37,18 @@ def test_system_information_e2e():
     print()
     
     # 1. Create System Information Type 3 message
-    print("Creating System Information Type 3 message...")
+    print("Creating System Information Type 3 message (GSM 04.08)...")
     
     cell_identity = 12345
     location_area_code = 100
+    mobile_country_code = 440
+    mobile_network_code = 10
     arfcn = 975
-    neighbor_cells = [980, 985, 990, 1000]
+    neighbor_cells = [980, 985]  # Max 2 neighbors due to 184-bit constraint
     
-    print(f"  Cell Identity (Base Station ID): {cell_identity}")
+    print(f"  Cell Identity: {cell_identity}")
     print(f"  Location Area Code: {location_area_code}")
+    print(f"  MCC: {mobile_country_code}, MNC: {mobile_network_code}")
     print(f"  ARFCN: {arfcn}")
     print(f"  Neighbor Cells: {neighbor_cells}")
     print()
@@ -54,6 +57,8 @@ def test_system_information_e2e():
     info_bits = encode_system_information_type3(
         cell_identity=cell_identity,
         location_area_code=location_area_code,
+        mobile_country_code=mobile_country_code,
+        mobile_network_code=mobile_network_code,
         arfcn=arfcn,
         neighbor_cells=neighbor_cells
     )
@@ -175,7 +180,7 @@ def test_system_information_e2e():
             print("Decoded System Information:")
             print(f"  Cell Identity: {decoded_si['cell_identity']}")
             print(f"  Location Area Code: {decoded_si['location_area_code']}")
-            print(f"  ARFCN: {decoded_si['arfcn']}")
+            print(f"  MCC: {decoded_si['mobile_country_code']}, MNC: {decoded_si['mobile_network_code']}")
             print(f"  Neighbor Cells: {decoded_si['neighbor_cells']}")
             print()
             
@@ -183,7 +188,8 @@ def test_system_information_e2e():
             all_match = (
                 decoded_si['cell_identity'] == cell_identity and
                 decoded_si['location_area_code'] == location_area_code and
-                decoded_si['arfcn'] == arfcn and
+                decoded_si['mobile_country_code'] == mobile_country_code and
+                decoded_si['mobile_network_code'] == mobile_network_code and
                 decoded_si['neighbor_cells'] == neighbor_cells
             )
             
@@ -197,7 +203,8 @@ def test_system_information_e2e():
                 print("✗ System Information does not match original")
                 print(f"  Expected Cell Identity: {cell_identity}, Got: {decoded_si['cell_identity']}")
                 print(f"  Expected LAC: {location_area_code}, Got: {decoded_si['location_area_code']}")
-                print(f"  Expected ARFCN: {arfcn}, Got: {decoded_si['arfcn']}")
+                print(f"  Expected MCC: {mobile_country_code}, Got: {decoded_si['mobile_country_code']}")
+                print(f"  Expected MNC: {mobile_network_code}, Got: {decoded_si['mobile_network_code']}")
                 print(f"  Expected Neighbors: {neighbor_cells}, Got: {decoded_si['neighbor_cells']}")
         else:
             print("✗ BCCH decoding FAILED")
