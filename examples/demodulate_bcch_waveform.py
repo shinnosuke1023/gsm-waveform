@@ -126,7 +126,44 @@ def demodulate_bcch_file(filename: str, tsc_index: int = 0):
     best_phase = 0
     
     for phase_idx, demod_bits in enumerate(all_phases):
-        # Detect SCH burst
+        # First, try assuming no FCCH/SCH (just 4 normal bursts back-to-back)
+        # This is the current waveform format for SI data compatibility
+        for offset in range(-5, 6):
+            data_bursts = []
+            success = True
+            
+            for i in range(4):
+                burst_start = offset + i * 148
+                
+                if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                    burst = demod_bits[burst_start:burst_start + 148]
+                    try:
+                        data114 = extract_burst_data_114(burst)
+                        data_bursts.append(data114)
+                    except:
+                        success = False
+                        break
+                else:
+                    success = False
+                    break
+            
+            if success and len(data_bursts) == 4:
+                try:
+                    info_bits, valid = decode_bcch_pipeline(data_bursts)
+                    
+                    if valid:
+                        print(f"  Phase {phase_idx}: BCCH decoded successfully (4 bursts, offset={offset:+d})!")
+                        best_valid = True
+                        best_info_bits = info_bits
+                        best_phase = phase_idx
+                        break
+                except Exception:
+                    pass
+        
+        if best_valid:
+            break
+        
+        # If direct decoding failed, try SCH-based detection
         sch_positions = detect_sch_burst(demod_bits, threshold=0.5)
         
         if sch_positions:
@@ -192,6 +229,50 @@ def demodulate_bcch_file(filename: str, tsc_index: int = 0):
             
             if best_valid:
                 break
+        
+        # If TSC detection failed, try timing-based approach using SCH position
+        # This assumes guard_samples=0 in waveform generation
+        if not best_valid and sch_positions:
+            sch_pos = sch_positions[0]
+            # SCH TSC center is at sch_pos, so SCH starts at sch_pos - 61
+            sch_start = sch_pos - 61
+            
+            # With guard_samples=0, bursts are back-to-back
+            # First normal burst starts immediately after SCH
+            first_normal_start = sch_start + 148
+            
+            # Try small offsets to account for demodulation alignment
+            for offset in range(-5, 6):
+                data_bursts = []
+                success = True
+                
+                for i in range(4):
+                    burst_start = first_normal_start + offset + i * 148
+                    
+                    if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                        burst = demod_bits[burst_start:burst_start + 148]
+                        try:
+                            data114 = extract_burst_data_114(burst)
+                            data_bursts.append(data114)
+                        except:
+                            success = False
+                            break
+                    else:
+                        success = False
+                        break
+                
+                if success and len(data_bursts) == 4:
+                    try:
+                        info_bits, valid = decode_bcch_pipeline(data_bursts)
+                        
+                        if valid:
+                            print(f"  Phase {phase_idx}: BCCH decoded successfully (timing-based, offset={offset:+d})!")
+                            best_valid = True
+                            best_info_bits = info_bits
+                            best_phase = phase_idx
+                            break
+                    except Exception:
+                        pass
         
         if best_valid:
             break

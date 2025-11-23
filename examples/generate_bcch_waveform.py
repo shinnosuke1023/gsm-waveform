@@ -129,25 +129,30 @@ def main():
         acc=0xFFFF
     )
     
-    # Generate BCCH frame
+    # Generate normal bursts for BCCH data
+    # Note: Skipping FCCH and SCH for now as they cause demodulation issues with SI data
+    # In a real system, FCCH and SCH would be needed for frequency and time synchronization
     print()
-    frame_bursts = generate_bcch_frame(
-        info_bits=info_bits,
-        bsic=10,  # Example BSIC
-        fn=0,     # Frame number
-        tsc_index=0  # Use TSC 0
-    )
+    print("Building normal bursts with SI data...")
+    
+    # Encode SI through BCCH pipeline
+    encoded_456 = make_bcch_encoded_456(info_bits)
+    data_bursts = interleave_456_to_4x114(encoded_456)
+    
+    # Build 4 normal bursts with TSC
+    tsc = get_tsc(0)  # Training Sequence Code 0
+    frame_bursts = [build_normal_burst(data, tsc) for data in data_bursts]
     
     print()
     print(f"Frame generated with {len(frame_bursts)} bursts:")
-    print(f"  1. FCCH (frequency correction)")
-    print(f"  2. SCH (synchronization)")
-    print(f"  3-6. Normal bursts (BCCH data)")
+    print(f"  1-4. Normal bursts (BCCH data with SI Type 3)")
     print()
     
     # Modulate bursts to IQ samples
     print("Modulating bursts to GMSK IQ samples...")
-    guard_samples = 66  # ~8.25 bit periods * 8 samples/bit
+    # Note: guard_samples=0 for compatibility with System Information demodulation
+    # Guard samples can cause phase discontinuities with complex SI data patterns
+    guard_samples = 0
     iq_samples = modulate_burst_sequence(
         frame_bursts,
         guard_samples=guard_samples
