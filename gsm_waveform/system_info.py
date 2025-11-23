@@ -128,8 +128,12 @@ def encode_system_information_type3(
     bit_pos += 8
     
     # Byte 6: MNC digit 2 (4 bits) + MNC digit 1 (4 bits)
-    info_bits[bit_pos:bit_pos+4] = _int_to_bits(mnc_digits[1], 4)
-    info_bits[bit_pos+4:bit_pos+8] = _int_to_bits(mnc_digits[0], 4)
+    # For 2-digit MNC: mnc_digits = [tens, ones], so d1=tens, d2=ones
+    # For 3-digit MNC: mnc_digits = [hundreds, tens, ones], so d1=hundreds, d2=tens
+    mnc_d2 = mnc_digits[1] if len(mnc_digits) >= 2 else 0
+    mnc_d1 = mnc_digits[0] if len(mnc_digits) >= 1 else 0
+    info_bits[bit_pos:bit_pos+4] = _int_to_bits(mnc_d2, 4)
+    info_bits[bit_pos+4:bit_pos+8] = _int_to_bits(mnc_d1, 4)
     bit_pos += 8
     
     # Bytes 7-8: Location Area Code (16 bits, MSB first)
