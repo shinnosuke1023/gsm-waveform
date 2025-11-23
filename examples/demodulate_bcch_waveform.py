@@ -23,7 +23,8 @@ from gsm_waveform import (
     decode_bcch_pipeline,
     decode_sch_39bits,
     FS_GEN,
-    OSR_DEFAULT
+    OSR_DEFAULT,
+    format_system_information
 )
 
 
@@ -177,7 +178,11 @@ def demodulate_bcch_file(filename: str, tsc_index: int = 0):
                 print(f"  ✓ BCCH decoded successfully!")
                 print(f"  Parity check: PASSED")
                 
-                # Display formatted BCCH content
+                # Display System Information if present
+                formatted_si = format_system_information(info_bits)
+                print(formatted_si)
+                
+                # Also display raw BCCH content for debugging
                 formatted_content = format_bcch_content(info_bits)
                 print(formatted_content)
             else:

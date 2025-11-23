@@ -22,7 +22,8 @@ from gsm_waveform import (
     gmsk_modulate,
     modulate_burst_sequence,
     write_complex_iq,
-    FS_GEN
+    FS_GEN,
+    encode_system_information_type3
 )
 
 
@@ -82,14 +83,27 @@ def main():
     print("=" * 60)
     print()
     
-    # Create sample information bits (184 bits)
-    # In a real system, this would be the System Information message
-    print("Creating sample BCCH information...")
-    info_bits = np.zeros(184, dtype=np.uint8)
+    # Create System Information Type 3 message with real GSM parameters
+    print("Creating System Information Type 3 message...")
     
-    # Set some bits to create a non-trivial pattern
-    # (In reality, this would be properly formatted SI message)
-    info_bits[0:8] = [0, 1, 0, 1, 0, 1, 0, 1]  # Sample pattern
+    # Define network parameters
+    cell_identity = 12345       # Base Station ID / Cell Identity
+    location_area_code = 100    # Location Area Code
+    arfcn = 975                 # ARFCN (e.g., GSM-900 downlink)
+    neighbor_cells = [980, 985, 990, 1000]  # Neighbor cell ARFCNs
+    
+    print(f"  Cell Identity (Base Station ID): {cell_identity}")
+    print(f"  Location Area Code: {location_area_code}")
+    print(f"  ARFCN: {arfcn}")
+    print(f"  Neighbor Cells: {neighbor_cells}")
+    
+    # Encode System Information
+    info_bits = encode_system_information_type3(
+        cell_identity=cell_identity,
+        location_area_code=location_area_code,
+        arfcn=arfcn,
+        neighbor_cells=neighbor_cells
+    )
     
     # Generate BCCH frame
     print()
