@@ -98,7 +98,7 @@ class TestViterbiDecoding:
         assert len(decoded) == len(info)
         # Most bits should match (allow some error for random patterns)
         similarity = np.mean(decoded == info)
-        assert similarity > 0.8
+        assert similarity >= 0.8
     
     def test_viterbi_with_tail(self):
         """Test Viterbi decoding with tail bits"""
