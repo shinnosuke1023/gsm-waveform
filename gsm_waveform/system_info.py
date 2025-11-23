@@ -1,9 +1,9 @@
 """GSM System Information Message Encoding/Decoding
 
 This module implements GSM System Information Type 3 encoding and decoding
-according to GSM 04.08 specification (3GPP TS 24.008).
+according to GSM 04.08 / 3GPP TS 44.018 specification.
 
-System Information Type 3 message structure (GSM 04.08 Section 9.1.35):
+System Information Type 3 message structure (GSM 04.08 Section 9.1.35 / TS 44.018 Section 9.1.35):
 - Protocol Discriminator (4 bits) + Skip Indicator (4 bits)
 - Message Type (8 bits)
 - Cell Identity (16 bits)
@@ -16,10 +16,32 @@ System Information Type 3 message structure (GSM 04.08 Section 9.1.35):
 - Cell Selection Parameters (16 bits)
 - RACH Control Parameters (24 bits)
 - SI 3 Rest Octets (variable length)
+
+Note: The Rest Octets implementation is a custom extension for simulation purposes.
+      In standard GSM 04.08, Rest Octets contain Cell Selection parameters, GPRS indicators, etc.
+      This implementation uses a simplified custom format: ARFCN + neighbor cell list.
 """
 
 import numpy as np
 from typing import List, Optional, Dict, Tuple
+
+
+# GSM 04.08 Constants
+PROTOCOL_DISCRIMINATOR_RR = 0x6  # Radio Resource Management
+SKIP_INDICATOR_NONE = 0x0  # No extension octets
+MESSAGE_TYPE_SI3 = 0x1B  # System Information Type 3
+
+# Field bit widths
+CELL_IDENTITY_BITS = 16
+LOCATION_AREA_CODE_BITS = 16
+MCC_DIGITS = 3
+MNC_MAX_DIGITS = 3
+ARFCN_BITS = 10
+ACC_BITS = 16
+NEIGHBOR_COUNT_BITS = 4
+
+# Total BCCH payload size
+BCCH_INFO_BITS = 184  # 23 bytes
 
 
 def encode_system_information_type3(
@@ -28,7 +50,6 @@ def encode_system_information_type3(
     mobile_country_code: int = 1,
     mobile_network_code: int = 1,
     arfcn: int = 0,
-    bsic: int = 0,
     # Control Channel Description parameters
     att: bool = True,
     bs_ag_blks_res: int = 1,
@@ -54,15 +75,14 @@ def encode_system_information_type3(
     # Neighbor cells
     neighbor_cells: Optional[List[int]] = None
 ) -> np.ndarray:
-    """Encode System Information Type 3 message according to GSM 04.08.
+    """Encode System Information Type 3 message according to GSM 04.08 / TS 44.018.
     
     Args:
         cell_identity: Cell Identity (0-65535, 16 bits)
         location_area_code: Location Area Code (0-65535, 16 bits)
         mobile_country_code: MCC (0-999, 3 BCD digits)
         mobile_network_code: MNC (0-999, 2-3 BCD digits)
-        arfcn: ARFCN (0-1023, 10 bits)
-        bsic: Base Station Identity Code (0-63, 6 bits)
+        arfcn: ARFCN (0-1023, 10 bits) - stored in custom Rest Octets
         att: Attach/detach allowed flag
         bs_ag_blks_res: Number of blocks reserved for AGCH (0-7)
         ccch_conf: CCCH configuration (0-7)
@@ -81,7 +101,7 @@ def encode_system_information_type3(
         cell_bar_access: Cell barred indicator
         re: Call reestablishment allowed
         acc: Access control class bitmap (16 bits)
-        neighbor_cells: List of neighbor cell ARFCNs
+        neighbor_cells: List of neighbor cell ARFCNs (max 2 due to bit constraints)
         
     Returns:
         184-bit array for BCCH information payload
@@ -100,8 +120,6 @@ def encode_system_information_type3(
         raise ValueError(f"mobile_network_code must be 0-999, got {mobile_network_code}")
     if not (0 <= arfcn <= 1023):
         raise ValueError(f"arfcn must be 0-1023, got {arfcn}")
-    if not (0 <= bsic <= 63):
-        raise ValueError(f"bsic must be 0-63, got {bsic}")
     if not (0 <= bs_ag_blks_res <= 7):
         raise ValueError(f"bs_ag_blks_res must be 0-7, got {bs_ag_blks_res}")
     if not (0 <= ccch_conf <= 7):
@@ -131,19 +149,17 @@ def encode_system_information_type3(
             raise ValueError(f"neighbor_cells[{i}] must be 0-1023, got {ncell}")
     
     # Initialize 184-bit array (23 bytes)
-    info_bits = np.zeros(184, dtype=np.uint8)
+    info_bits = np.zeros(BCCH_INFO_BITS, dtype=np.uint8)
     bit_pos = 0
     
     # Byte 0: Protocol Discriminator (4 bits, bits 1-4) + Skip Indicator (4 bits, bits 5-8)
     # According to GSM 04.08, PD is in high nibble, Skip Indicator in low nibble
-    # PD = 0x06 for Radio Resource Management
-    # Skip Indicator = 0x0 (no extension)
-    info_bits[bit_pos:bit_pos+4] = _int_to_bits(0x6, 4)  # PD (high nibble)
-    info_bits[bit_pos+4:bit_pos+8] = _int_to_bits(0x0, 4)  # Skip Indicator (low nibble)
+    info_bits[bit_pos:bit_pos+4] = _int_to_bits(PROTOCOL_DISCRIMINATOR_RR, 4)  # PD (high nibble)
+    info_bits[bit_pos+4:bit_pos+8] = _int_to_bits(SKIP_INDICATOR_NONE, 4)  # Skip Indicator (low nibble)
     bit_pos += 8
     
-    # Byte 1: Message Type (0x1B for System Information Type 3)
-    info_bits[bit_pos:bit_pos+8] = _int_to_bits(0x1B, 8)
+    # Byte 1: Message Type
+    info_bits[bit_pos:bit_pos+8] = _int_to_bits(MESSAGE_TYPE_SI3, 8)
     bit_pos += 8
     
     # Bytes 2-3: Cell Identity (16 bits, MSB first)
@@ -240,32 +256,38 @@ def encode_system_information_type3(
     
     # Bytes 18-22: SI 3 Rest Octets (5 bytes = 40 bits)
     # After 18 bytes of mandatory GSM 04.08 fields (144 bits), 40 bits remain
-    # Custom encoding: ARFCN (10 bits) + neighbor cell list
-    # Note: In real GSM 04.08, ARFCN would be implicit or in Cell Channel Description
-    # We include it here for completeness and testing
+    #
+    # CUSTOM ENCODING (not standard GSM 04.08 compliant):
+    # This implementation uses a simplified custom format for simulation purposes:
+    #   - Serving cell ARFCN (10 bits)
+    #   - Neighbor cell count (4 bits, always present)
+    #   - Neighbor cell ARFCNs (10 bits each, max 2 cells fit in remaining space)
+    #
+    # Note: In real GSM 04.08/TS 44.018, Rest Octets have a complex structure with
+    #       optional selection parameters, GPRS/EGPRS indicators, SI2ter/SI2quater
+    #       indicators, etc. This custom format is for testing/simulation only.
     
     # Encode serving cell ARFCN (10 bits)
-    if bit_pos + 10 <= 184:
-        info_bits[bit_pos:bit_pos+10] = _int_to_bits(arfcn, 10)
-        bit_pos += 10
+    if bit_pos + ARFCN_BITS <= BCCH_INFO_BITS:
+        info_bits[bit_pos:bit_pos+ARFCN_BITS] = _int_to_bits(arfcn, ARFCN_BITS)
+        bit_pos += ARFCN_BITS
     
-    # Encode neighbor cells
-    if neighbor_cells and bit_pos + 4 <= 184:
-        # Calculate how many neighbors will fit in remaining space
-        available_bits = 184 - bit_pos - 4  # Reserve 4 bits for count
-        max_neighbors_that_fit = min(available_bits // 10, len(neighbor_cells), 15)  # Max 15 (4 bits = 0-15)
-        
-        # Encode neighbor cell count (4 bits)
-        info_bits[bit_pos:bit_pos+4] = _int_to_bits(max_neighbors_that_fit, 4)
-        bit_pos += 4
-        
-        # Encode each neighbor ARFCN (10 bits each)
-        for i in range(max_neighbors_that_fit):
-            if bit_pos + 10 <= 184:
-                info_bits[bit_pos:bit_pos+10] = _int_to_bits(neighbor_cells[i], 10)
-                bit_pos += 10
-            else:
-                break
+    # Calculate how many neighbors will fit in remaining space
+    available_bits = BCCH_INFO_BITS - bit_pos - NEIGHBOR_COUNT_BITS  # Reserve 4 bits for count
+    max_neighbors_that_fit = min(available_bits // ARFCN_BITS, len(neighbor_cells), 15)  # Max 15 (4 bits = 0-15)
+    
+    # Always encode neighbor cell count (4 bits), even if 0
+    if bit_pos + NEIGHBOR_COUNT_BITS <= BCCH_INFO_BITS:
+        info_bits[bit_pos:bit_pos+NEIGHBOR_COUNT_BITS] = _int_to_bits(max_neighbors_that_fit, NEIGHBOR_COUNT_BITS)
+        bit_pos += NEIGHBOR_COUNT_BITS
+    
+    # Encode each neighbor ARFCN (10 bits each)
+    for i in range(max_neighbors_that_fit):
+        if bit_pos + ARFCN_BITS <= BCCH_INFO_BITS:
+            info_bits[bit_pos:bit_pos+ARFCN_BITS] = _int_to_bits(neighbor_cells[i], ARFCN_BITS)
+            bit_pos += ARFCN_BITS
+        else:
+            break
     
     # Remaining bits are padding (already initialized to 0)
     
@@ -273,7 +295,7 @@ def encode_system_information_type3(
 
 
 def decode_system_information_type3(info_bits: np.ndarray) -> Dict:
-    """Decode System Information Type 3 message according to GSM 04.08.
+    """Decode System Information Type 3 message according to GSM 04.08 / TS 44.018.
     
     Args:
         info_bits: 184-bit information array
@@ -281,10 +303,10 @@ def decode_system_information_type3(info_bits: np.ndarray) -> Dict:
     Returns:
         Dictionary with decoded fields including all GSM 04.08 parameters
     """
-    if len(info_bits) != 184:
+    if len(info_bits) != BCCH_INFO_BITS:
         return {
             'valid': False,
-            'error': f'Expected 184 bits, got {len(info_bits)}'
+            'error': f'Expected {BCCH_INFO_BITS} bits, got {len(info_bits)}'
         }
     
     result = {'valid': True}
@@ -298,6 +320,10 @@ def decode_system_information_type3(info_bits: np.ndarray) -> Dict:
     # Byte 1: Message Type
     result['message_type'] = _bits_to_int(info_bits[bit_pos:bit_pos+8])
     bit_pos += 8
+    
+    # Note: We continue decoding even if message type is incorrect,
+    # but mark as invalid for stricter validation by callers if needed
+    result['message_type_valid'] = (result['message_type'] == MESSAGE_TYPE_SI3)
     
     # Bytes 2-3: Cell Identity
     result['cell_identity'] = _bits_to_int(info_bits[bit_pos:bit_pos+16])
@@ -379,27 +405,28 @@ def decode_system_information_type3(info_bits: np.ndarray) -> Dict:
     result['acc'] = _bits_to_int(info_bits[bit_pos:bit_pos+16])
     bit_pos += 16
     
-    # Bytes 18-22: SI 3 Rest Octets (5 bytes = 40 bits) - decode ARFCN and neighbor cells
-    # Custom encoding: ARFCN (10 bits) + neighbor cell list
+    # Bytes 18-22: SI 3 Rest Octets (5 bytes = 40 bits)
+    # CUSTOM ENCODING (not standard GSM 04.08 compliant):
+    # Decode ARFCN and neighbor cell list using the same custom format as encode
     
     # Decode serving cell ARFCN (10 bits)
-    if bit_pos + 10 <= 184:
-        result['arfcn'] = _bits_to_int(info_bits[bit_pos:bit_pos+10])
-        bit_pos += 10
+    if bit_pos + ARFCN_BITS <= BCCH_INFO_BITS:
+        result['arfcn'] = _bits_to_int(info_bits[bit_pos:bit_pos+ARFCN_BITS])
+        bit_pos += ARFCN_BITS
     else:
         result['arfcn'] = 0
     
     # Decode neighbor cells
     neighbor_cells = []
-    if bit_pos + 4 <= 184:
-        num_neighbors = _bits_to_int(info_bits[bit_pos:bit_pos+4])
-        bit_pos += 4
+    if bit_pos + NEIGHBOR_COUNT_BITS <= BCCH_INFO_BITS:
+        num_neighbors = _bits_to_int(info_bits[bit_pos:bit_pos+NEIGHBOR_COUNT_BITS])
+        bit_pos += NEIGHBOR_COUNT_BITS
         
-        for i in range(min(num_neighbors, 16)):
-            if bit_pos + 10 <= 184:
-                neighbor_arfcn = _bits_to_int(info_bits[bit_pos:bit_pos+10])
+        for i in range(min(num_neighbors, 15)):  # Max 15 (4 bits)
+            if bit_pos + ARFCN_BITS <= BCCH_INFO_BITS:
+                neighbor_arfcn = _bits_to_int(info_bits[bit_pos:bit_pos+ARFCN_BITS])
                 neighbor_cells.append(neighbor_arfcn)
-                bit_pos += 10
+                bit_pos += ARFCN_BITS
             else:
                 break
     
