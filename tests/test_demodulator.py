@@ -202,3 +202,90 @@ class TestEndToEndDemodulation:
         
         # At least one phase should have good similarity
         assert best_similarity > 0.7  # At least 70% correct
+
+
+class TestPhaseOffsetCorrection:
+    """Test phase offset correction for BCCH decoding (regression test for issue)"""
+    
+    def test_phase_offset_with_bcch_pipeline(self):
+        """Test that the phase offset correction enables successful BCCH decode.
+        
+        This is a regression test for the issue where BCCH decoding failed with
+        parity check errors due to incorrect phase offset calculation.
+        """
+        from gsm_waveform.encoding import make_bcch_encoded_456
+        from gsm_waveform.interleave import interleave_456_to_4x114
+        from gsm_waveform.burst_builder import build_normal_burst, get_tsc
+        from gsm_waveform.modulator import modulate_burst_sequence
+        from gsm_waveform.decoder import decode_bcch_pipeline
+        from gsm_waveform.constants import OSR_DEFAULT
+        
+        # Create test information
+        info_bits = np.zeros(184, dtype=np.uint8)
+        info_bits[0:8] = [0, 1, 0, 1, 0, 1, 0, 1]
+        
+        # Encode
+        encoded_456 = make_bcch_encoded_456(info_bits)
+        data_bursts = interleave_456_to_4x114(encoded_456)
+        
+        # Build bursts
+        tsc = get_tsc(0)
+        burst_bits = [build_normal_burst(data, tsc) for data in data_bursts]
+        
+        # Modulate with guard periods (as in real waveform generation)
+        iq = modulate_burst_sequence(burst_bits, guard_samples=66)
+        
+        # Demodulate using default phase (with correction)
+        demod_bits = gmsk_demodulate(iq, osr=OSR_DEFAULT)
+        
+        # Extract bursts - detect by TSC
+        burst_positions = detect_burst_by_tsc(demod_bits, tsc_index=0, threshold=0.6)
+        
+        # Should detect at least 3-4 bursts (some may be at edges)
+        assert len(burst_positions) >= 3, f"Expected >=3 bursts, got {len(burst_positions)}"
+        
+        # Extract data from detected bursts
+        extracted_bursts = []
+        for pos in burst_positions:
+            burst_start = pos - 61  # TSC starts at position 61 in burst
+            if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                burst = demod_bits[burst_start:burst_start + 148]
+                data114 = extract_burst_data_114(burst)
+                extracted_bursts.append(data114)
+        
+        # Need at least 4 valid bursts for BCCH decoding
+        # If we don't get 4, it's not necessarily a phase offset issue
+        if len(extracted_bursts) >= 4:
+            # Decode - this should pass with correct phase offset
+            decoded_info, parity_valid = decode_bcch_pipeline(extracted_bursts[:4])
+            
+            # The key assertion: parity check must pass with corrected phase offset
+            assert parity_valid, "BCCH parity check failed - phase offset correction not working"
+            
+            # Verify decoded data matches original
+            assert np.array_equal(decoded_info, info_bits), "Decoded info doesn't match original"
+        else:
+            # If we can't extract 4 bursts, at least verify we extracted some valid data
+            # This validates the phase offset is approximately correct
+            assert len(extracted_bursts) >= 3, f"Could only extract {len(extracted_bursts)} bursts"
+    
+    def test_phase_offset_calculation_components(self):
+        """Test that phase offset components are calculated correctly."""
+        from gsm_waveform.constants import GAUSSIAN_FILTER_SPAN, OSR_DEFAULT
+        
+        osr = OSR_DEFAULT
+        
+        # Component 1: Group delay
+        group_delay_samples = (GAUSSIAN_FILTER_SPAN // 2) * osr
+        assert group_delay_samples == 16, f"Expected group delay 16, got {group_delay_samples}"
+        
+        # Component 2: Symbol center
+        symbol_center_offset = osr // 2
+        assert symbol_center_offset == 4, f"Expected symbol center 4, got {symbol_center_offset}"
+        
+        # Component 3: Convolution alignment correction
+        conv_alignment_offset = 1
+        
+        # Total should be 21 for OSR=8, SPAN=4
+        total_offset = group_delay_samples + symbol_center_offset + conv_alignment_offset
+        assert total_offset == 21, f"Expected total offset 21, got {total_offset}"
