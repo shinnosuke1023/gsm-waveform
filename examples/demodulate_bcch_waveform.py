@@ -126,14 +126,16 @@ def demodulate_bcch_file(filename: str, tsc_index: int = 0):
     best_phase = 0
     
     for phase_idx, demod_bits in enumerate(all_phases):
-        # First, try assuming no FCCH/SCH (just 4 normal bursts back-to-back)
-        # This is the current waveform format for SI data compatibility
-        for offset in range(-5, 6):
+        # Strategy 1: Try known frame structure (FCCH + SCH + 4 normal bursts)
+        # With guard_samples=0, bursts are back-to-back at positions:
+        # FCCH: 0-147, SCH: 148-295, Normal bursts: 296+
+        for offset in range(-10, 11):
             data_bursts = []
             success = True
             
             for i in range(4):
-                burst_start = offset + i * 148
+                # Normal bursts start at position 296 (after FCCH+SCH)
+                burst_start = 296 + offset + i * 148
                 
                 if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
                     burst = demod_bits[burst_start:burst_start + 148]
@@ -152,13 +154,63 @@ def demodulate_bcch_file(filename: str, tsc_index: int = 0):
                     info_bits, valid = decode_bcch_pipeline(data_bursts)
                     
                     if valid:
-                        print(f"  Phase {phase_idx}: BCCH decoded successfully (4 bursts, offset={offset:+d})!")
+                        print(f"  Phase {phase_idx}: BCCH decoded successfully (known structure, offset={offset:+d})!")
                         best_valid = True
                         best_info_bits = info_bits
                         best_phase = phase_idx
                         break
                 except Exception:
                     pass
+        
+        if best_valid:
+            break
+        
+        # Strategy 2: Try using TSC correlation to find normal bursts
+        if not best_valid:
+            burst_positions = detect_burst_by_tsc(demod_bits, tsc_index=tsc_index, threshold=0.5)
+            
+            if len(burst_positions) >= 4:
+                # Try different groups of 4 consecutive detected bursts
+                for start_idx in range(min(5, len(burst_positions) - 3)):
+                    for offset in range(-5, 6):
+                        data_bursts = []
+                        success = True
+                        
+                        for i in range(4):
+                            if start_idx + i >= len(burst_positions):
+                                success = False
+                                break
+                            
+                            pos = burst_positions[start_idx + i]
+                            burst_start = pos - 61 + offset
+                            
+                            if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                                burst = demod_bits[burst_start:burst_start + 148]
+                                try:
+                                    data114 = extract_burst_data_114(burst)
+                                    data_bursts.append(data114)
+                                except:
+                                    success = False
+                                    break
+                            else:
+                                success = False
+                                break
+                        
+                        if success and len(data_bursts) == 4:
+                            try:
+                                info_bits, valid = decode_bcch_pipeline(data_bursts)
+                                
+                                if valid:
+                                    print(f"  Phase {phase_idx}: BCCH decoded successfully (TSC correlation, start_idx={start_idx}, offset={offset:+d})!")
+                                    best_valid = True
+                                    best_info_bits = info_bits
+                                    best_phase = phase_idx
+                                    break
+                            except Exception:
+                                pass
+                    
+                    if best_valid:
+                        break
         
         if best_valid:
             break
