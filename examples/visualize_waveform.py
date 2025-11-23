@@ -92,14 +92,19 @@ def analyze_waveform(filename: str):
     
     # Simple histogram of magnitudes (text-based)
     print("Magnitude Distribution (10 bins):")
-    hist, bin_edges = np.histogram(magnitude, bins=10)
-    max_bar_width = 50
-    max_count = np.max(hist)
-    
-    for i, count in enumerate(hist):
-        bar_width = int(count / max_count * max_bar_width) if max_count > 0 else 0
-        bar = '█' * bar_width
-        print(f"  {bin_edges[i]:.3f}-{bin_edges[i+1]:.3f}: {bar} {count}")
+    # Check if magnitude has sufficient range for histogram
+    mag_range = magnitude.max() - magnitude.min()
+    if mag_range < 1e-6:
+        print("  All samples have constant magnitude (no variation)")
+    else:
+        hist, bin_edges = np.histogram(magnitude, bins=10)
+        max_bar_width = 50
+        max_count = np.max(hist)
+        
+        for i, count in enumerate(hist):
+            bar_width = int(count / max_count * max_bar_width) if max_count > 0 else 0
+            bar = '█' * bar_width
+            print(f"  {bin_edges[i]:.3f}-{bin_edges[i+1]:.3f}: {bar} {count}")
     
     print()
     print("=" * 60)
