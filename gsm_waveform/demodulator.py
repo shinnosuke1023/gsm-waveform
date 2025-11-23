@@ -65,13 +65,17 @@ def gmsk_demodulate(iq: np.ndarray,
     # Single best phase
     # Start at sample corresponding to first symbol center
     # The Gaussian filter with mode='same' in modulator centers the output
-    # but due to upsampling and filter characteristics, the optimal phase
-    # is offset by approximately (span/2 * osr + osr // 2 + 1) samples
+    # but due to upsampling (zeros inserted between symbols) and filter 
+    # characteristics, there is a phase misalignment.
     delay_symbols = GAUSSIAN_FILTER_SPAN // 2
     delay_samples = delay_symbols * osr
     
-    # Optimal phase offset is delay_samples + osr // 2 + 1
-    # This accounts for the convolution mode='same' and upsampling alignment
+    # Optimal phase offset: delay_samples + osr // 2 + 1
+    # - delay_samples: accounts for filter group delay (span/2 symbols)
+    # - osr // 2: centers sampling within the symbol period
+    # - +1: compensates for the asymmetry introduced by upsampling placement
+    #       and mode='same' convolution, which shifts the optimal sampling
+    #       point by one sample relative to the symbol center
     start_idx = delay_samples + osr // 2 + 1
     
     # Make sure we don't go out of bounds
