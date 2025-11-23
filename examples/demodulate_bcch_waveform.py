@@ -142,49 +142,56 @@ def demodulate_bcch_file(filename: str, tsc_index: int = 0):
                     if valid and not best_valid:
                         print(f"  Phase {phase_idx}: SCH decoded (BSIC={bsic}, FN={fn})")
         
-        # Detect normal bursts by TSC
-        burst_positions = detect_burst_by_tsc(demod_bits, tsc_index=tsc_index, threshold=0.6)
-        
-        if len(burst_positions) >= 4:
-            # Try different starting positions (skip FCCH/SCH if detected)
-            for start_idx in range(min(3, len(burst_positions) - 3)):
-                # Try small offsets around detected position
-                for offset in range(-3, 4):
-                    data_bursts = []
-                    success = True
-                    
-                    for i in range(4):
-                        if start_idx + i >= len(burst_positions):
-                            success = False
-                            break
+        # Try multiple thresholds for burst detection
+        for threshold in [0.6, 0.55, 0.5, 0.45]:
+            burst_positions = detect_burst_by_tsc(demod_bits, tsc_index=tsc_index, threshold=threshold)
+            
+            if len(burst_positions) >= 4:
+                # Try different starting positions (skip FCCH/SCH if detected)
+                for start_idx in range(min(3, len(burst_positions) - 3)):
+                    # Try small offsets around detected position
+                    for offset in range(-5, 6):
+                        data_bursts = []
+                        success = True
                         
-                        pos = burst_positions[start_idx + i]
-                        burst_start = pos - 61 + offset
-                        
-                        if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
-                            burst = demod_bits[burst_start:burst_start + 148]
-                            data114 = extract_burst_data_114(burst)
-                            data_bursts.append(data114)
-                        else:
-                            success = False
-                            break
-                    
-                    if success and len(data_bursts) == 4:
-                        # Try to decode BCCH
-                        try:
-                            info_bits, valid = decode_bcch_pipeline(data_bursts)
-                            
-                            if valid and not best_valid:
-                                print(f"  Phase {phase_idx}: BCCH decoded successfully (start_idx={start_idx}, offset={offset:+d})!")
-                                best_valid = True
-                                best_info_bits = info_bits
-                                best_phase = phase_idx
+                        for i in range(4):
+                            if start_idx + i >= len(burst_positions):
+                                success = False
                                 break
-                        except Exception:
-                            pass
+                            
+                            pos = burst_positions[start_idx + i]
+                            burst_start = pos - 61 + offset
+                            
+                            if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                                burst = demod_bits[burst_start:burst_start + 148]
+                                data114 = extract_burst_data_114(burst)
+                                data_bursts.append(data114)
+                            else:
+                                success = False
+                                break
+                        
+                        if success and len(data_bursts) == 4:
+                            # Try to decode BCCH
+                            try:
+                                info_bits, valid = decode_bcch_pipeline(data_bursts)
+                                
+                                if valid and not best_valid:
+                                    print(f"  Phase {phase_idx}: BCCH decoded successfully (threshold={threshold}, start_idx={start_idx}, offset={offset:+d})!")
+                                    best_valid = True
+                                    best_info_bits = info_bits
+                                    best_phase = phase_idx
+                                    break
+                            except Exception:
+                                pass
+                    
+                    if best_valid:
+                        break
                 
                 if best_valid:
                     break
+            
+            if best_valid:
+                break
         
         if best_valid:
             break
