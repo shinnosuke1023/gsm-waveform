@@ -9,8 +9,20 @@ __version__ = "0.1.0"
 from .constants import *
 from .encoding import fire_encode_184, append_block_tail, convolutional_encode, make_bcch_encoded_456
 from .interleave import interleave_456_to_4x114
-from .burst_builder import build_normal_burst, build_fcch_burst, build_sch_burst, get_tsc
+from .burst_builder import (
+    build_normal_burst, build_fcch_burst, build_sch_burst, get_tsc,
+    build_sch_39bits, compute_sch_crc10
+)
 from .modulator import gmsk_modulate, modulate_burst_sequence
+from .demodulator import (
+    gmsk_demodulate, correlate_sequence, detect_burst_by_tsc,
+    extract_normal_burst_data, extract_burst_data_114,
+    detect_fcch_burst, detect_sch_burst, extract_sch_data
+)
+from .decoder import (
+    deinterleave_4x114_to_456, viterbi_decode, remove_tail_bits,
+    fire_decode_224, decode_bcch_pipeline, decode_sch_39bits
+)
 from .wavefile import write_complex_iq, read_complex_iq, get_sample_info
 
 __all__ = [
@@ -28,8 +40,16 @@ __all__ = [
     'interleave_456_to_4x114',
     # Burst building
     'build_normal_burst', 'build_fcch_burst', 'build_sch_burst', 'get_tsc',
+    'build_sch_39bits', 'compute_sch_crc10',
     # Modulation
     'gmsk_modulate', 'modulate_burst_sequence',
+    # Demodulation
+    'gmsk_demodulate', 'correlate_sequence', 'detect_burst_by_tsc',
+    'extract_normal_burst_data', 'extract_burst_data_114',
+    'detect_fcch_burst', 'detect_sch_burst', 'extract_sch_data',
+    # Decoding
+    'deinterleave_4x114_to_456', 'viterbi_decode', 'remove_tail_bits',
+    'fire_decode_224', 'decode_bcch_pipeline', 'decode_sch_39bits',
     # File IO
     'write_complex_iq', 'read_complex_iq', 'get_sample_info',
 ]
