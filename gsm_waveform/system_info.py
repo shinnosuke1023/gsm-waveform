@@ -70,7 +70,7 @@ def encode_system_information_type3(
         t3212: Periodic location update timer (0-255, in deci-hours)
         pwrc: Power control indicator
         dtx: Discontinuous transmission (0-3)
-        radio_link_timeout: Radio link timeout (0-15)
+        radio_link_timeout: Radio link timeout (0-31, 5 bits)
         cell_reselect_hysteresis: Cell reselect hysteresis (0-7, 2dB steps)
         ms_txpwr_max_cch: MS max TX power level on CCCH (0-31)
         rxlev_access_min: Minimum RX level for access (0-63)
@@ -89,15 +89,38 @@ def encode_system_information_type3(
     if neighbor_cells is None:
         neighbor_cells = []
     
+    # Validate input parameters to prevent out-of-range values
+    assert 0 <= cell_identity <= 65535, f"cell_identity must be 0-65535, got {cell_identity}"
+    assert 0 <= location_area_code <= 65535, f"location_area_code must be 0-65535, got {location_area_code}"
+    assert 0 <= mobile_country_code <= 999, f"mobile_country_code must be 0-999, got {mobile_country_code}"
+    assert 0 <= mobile_network_code <= 999, f"mobile_network_code must be 0-999, got {mobile_network_code}"
+    assert 0 <= arfcn <= 1023, f"arfcn must be 0-1023, got {arfcn}"
+    assert 0 <= bsic <= 63, f"bsic must be 0-63, got {bsic}"
+    assert 0 <= bs_ag_blks_res <= 7, f"bs_ag_blks_res must be 0-7, got {bs_ag_blks_res}"
+    assert 0 <= ccch_conf <= 7, f"ccch_conf must be 0-7, got {ccch_conf}"
+    assert 0 <= bs_pa_mfrms <= 9, f"bs_pa_mfrms must be 0-9, got {bs_pa_mfrms}"
+    assert 0 <= t3212 <= 255, f"t3212 must be 0-255, got {t3212}"
+    assert 0 <= dtx <= 3, f"dtx must be 0-3, got {dtx}"
+    assert 0 <= radio_link_timeout <= 31, f"radio_link_timeout must be 0-31, got {radio_link_timeout}"
+    assert 0 <= cell_reselect_hysteresis <= 7, f"cell_reselect_hysteresis must be 0-7, got {cell_reselect_hysteresis}"
+    assert 0 <= ms_txpwr_max_cch <= 31, f"ms_txpwr_max_cch must be 0-31, got {ms_txpwr_max_cch}"
+    assert 0 <= rxlev_access_min <= 63, f"rxlev_access_min must be 0-63, got {rxlev_access_min}"
+    assert 0 <= max_retrans <= 3, f"max_retrans must be 0-3, got {max_retrans}"
+    assert 0 <= tx_integer <= 15, f"tx_integer must be 0-15, got {tx_integer}"
+    assert 0 <= acc <= 0xFFFF, f"acc must be 0-65535, got {acc}"
+    for i, ncell in enumerate(neighbor_cells):
+        assert 0 <= ncell <= 1023, f"neighbor_cells[{i}] must be 0-1023, got {ncell}"
+    
     # Initialize 184-bit array (23 bytes)
     info_bits = np.zeros(184, dtype=np.uint8)
     bit_pos = 0
     
-    # Byte 0: Protocol Discriminator (4 bits) + Skip Indicator (4 bits)
+    # Byte 0: Protocol Discriminator (4 bits, bits 1-4) + Skip Indicator (4 bits, bits 5-8)
+    # According to GSM 04.08, PD is in high nibble, Skip Indicator in low nibble
     # PD = 0x06 for Radio Resource Management
     # Skip Indicator = 0x0 (no extension)
-    info_bits[bit_pos:bit_pos+4] = _int_to_bits(0x0, 4)  # Skip Indicator
-    info_bits[bit_pos+4:bit_pos+8] = _int_to_bits(0x6, 4)  # PD
+    info_bits[bit_pos:bit_pos+4] = _int_to_bits(0x6, 4)  # PD (high nibble)
+    info_bits[bit_pos+4:bit_pos+8] = _int_to_bits(0x0, 4)  # Skip Indicator (low nibble)
     bit_pos += 8
     
     # Byte 1: Message Type (0x1B for System Information Type 3)
@@ -196,7 +219,8 @@ def encode_system_information_type3(
     info_bits[bit_pos:bit_pos+16] = _int_to_bits(acc, 16)
     bit_pos += 16
     
-    # Bytes 18-23: SI 3 Rest Octets (6 bytes = 48 bits)
+    # Bytes 18-22: SI 3 Rest Octets (5 bytes = 40 bits)
+    # After 18 bytes of mandatory GSM 04.08 fields (144 bits), 40 bits remain
     # Custom encoding: ARFCN (10 bits) + neighbor cell list
     # Note: In real GSM 04.08, ARFCN would be implicit or in Cell Channel Description
     # We include it here for completeness and testing
@@ -247,9 +271,9 @@ def decode_system_information_type3(info_bits: np.ndarray) -> Dict:
     result = {'valid': True}
     bit_pos = 0
     
-    # Byte 0: Skip Indicator (4 bits) + Protocol Discriminator (4 bits)
-    result['skip_indicator'] = _bits_to_int(info_bits[bit_pos:bit_pos+4])
-    result['protocol_discriminator'] = _bits_to_int(info_bits[bit_pos+4:bit_pos+8])
+    # Byte 0: Protocol Discriminator (4 bits, high nibble) + Skip Indicator (4 bits, low nibble)
+    result['protocol_discriminator'] = _bits_to_int(info_bits[bit_pos:bit_pos+4])
+    result['skip_indicator'] = _bits_to_int(info_bits[bit_pos+4:bit_pos+8])
     bit_pos += 8
     
     # Byte 1: Message Type
@@ -336,7 +360,7 @@ def decode_system_information_type3(info_bits: np.ndarray) -> Dict:
     result['acc'] = _bits_to_int(info_bits[bit_pos:bit_pos+16])
     bit_pos += 16
     
-    # Bytes 18-23: SI 3 Rest Octets - decode ARFCN and neighbor cells
+    # Bytes 18-22: SI 3 Rest Octets (5 bytes = 40 bits) - decode ARFCN and neighbor cells
     # Custom encoding: ARFCN (10 bits) + neighbor cell list
     
     # Decode serving cell ARFCN (10 bits)
