@@ -23,7 +23,8 @@ from gsm_waveform import (
     decode_bcch_pipeline,
     decode_sch_39bits,
     FS_GEN,
-    OSR_DEFAULT
+    OSR_DEFAULT,
+    format_system_information
 )
 
 
@@ -112,84 +113,247 @@ def demodulate_bcch_file(filename: str, tsc_index: int = 0):
         print("Please run 'python examples/generate_bcch_waveform.py' first to create a waveform file.")
         return
     
-    # 2. Demodulate to bits
+    # 2. Demodulate to bits (try all phase alignments)
     print("Demodulating IQ samples to bits...")
-    demod_bits = gmsk_demodulate(iq_samples, osr=OSR_DEFAULT)
-    print(f"Demodulated to {len(demod_bits)} bits")
+    all_phases = gmsk_demodulate(iq_samples, osr=OSR_DEFAULT, return_all_phases=True)
+    print(f"Got {len(all_phases)} phase alignments")
     print()
     
-    # 3. Detect SCH burst
-    print("Detecting SCH burst...")
-    sch_positions = detect_sch_burst(demod_bits, threshold=0.5)
-    print(f"Found {len(sch_positions)} SCH burst(s) at positions: {sch_positions}")
+    # 3. Try decoding with each phase alignment
+    print("Trying to decode BCCH from each phase alignment...")
+    best_valid = False
+    best_info_bits = None
+    best_phase = 0
     
-    if sch_positions:
-        # Try to decode SCH
-        sch_pos = sch_positions[0]
-        # SCH structure: TAIL(3) | DATA(39) | TRAINING(64) | DATA(39) | TAIL(3)
-        # Position is where training starts, so data starts 3 bits before
-        if sch_pos >= 42:
-            sch_burst = demod_bits[sch_pos-42:sch_pos+106]
-            if len(sch_burst) >= 148:
-                left_data, right_data = extract_sch_data(sch_burst)
-                # SCH has same data on both sides
-                sch39 = left_data
-                bsic, fn, valid = decode_sch_39bits(sch39)
+    for phase_idx, demod_bits in enumerate(all_phases):
+        # Strategy 1: Try known frame structure (FCCH + SCH + 4 normal bursts)
+        # With guard_samples=0, bursts are back-to-back at positions:
+        # FCCH: 0-147, SCH: 148-295, Normal bursts: 296+
+        for offset in range(-10, 11):
+            data_bursts = []
+            success = True
+            
+            for i in range(4):
+                # Normal bursts start at position 296 (after FCCH+SCH)
+                burst_start = 296 + offset + i * 148
                 
-                if valid:
-                    print(f"  SCH decoded successfully!")
-                    print(f"  BSIC: {bsic}")
-                    print(f"  Frame Number: {fn}")
+                if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                    burst = demod_bits[burst_start:burst_start + 148]
+                    try:
+                        data114 = extract_burst_data_114(burst)
+                        data_bursts.append(data114)
+                    except:
+                        success = False
+                        break
                 else:
-                    print(f"  SCH CRC check failed")
-    print()
-    
-    # 4. Detect normal bursts by TSC
-    print(f"Detecting normal bursts with TSC {tsc_index}...")
-    burst_positions = detect_burst_by_tsc(demod_bits, tsc_index=tsc_index, threshold=0.6)
-    print(f"Found {len(burst_positions)} burst(s) at positions: {burst_positions[:10]}...")
-    print()
-    
-    if len(burst_positions) >= 4:
-        # Extract data from first 4 bursts
-        print("Extracting data from first 4 bursts...")
-        data_bursts = []
-        
-        for i, pos in enumerate(burst_positions[:4]):
-            # TSC position is in the middle of the burst
-            # Burst structure: TAIL(3) | DATA(57) | S(1) | TSC(26) | S(1) | DATA(57) | TAIL(3)
-            # Position is where TSC starts, so burst starts 61 bits before
-            burst_start = pos - 61
+                    success = False
+                    break
             
-            if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
-                burst = demod_bits[burst_start:burst_start + 148]
-                data114 = extract_burst_data_114(burst)
-                data_bursts.append(data114)
-                print(f"  Burst {i+1}: extracted 114 data bits")
+            if success and len(data_bursts) == 4:
+                try:
+                    info_bits, valid = decode_bcch_pipeline(data_bursts)
+                    
+                    if valid:
+                        print(f"  Phase {phase_idx}: BCCH decoded successfully (known structure, offset={offset:+d})!")
+                        best_valid = True
+                        best_info_bits = info_bits
+                        best_phase = phase_idx
+                        break
+                except Exception:
+                    pass
         
-        if len(data_bursts) == 4:
-            # 5. Decode BCCH
-            print()
-            print("Decoding BCCH information...")
-            info_bits, valid = decode_bcch_pipeline(data_bursts)
+        if best_valid:
+            break
+        
+        # Strategy 2: Try using TSC correlation to find normal bursts
+        if not best_valid:
+            burst_positions = detect_burst_by_tsc(demod_bits, tsc_index=tsc_index, threshold=0.5)
             
-            if valid:
-                print(f"  ✓ BCCH decoded successfully!")
-                print(f"  Parity check: PASSED")
+            if len(burst_positions) >= 4:
+                # Try different groups of 4 consecutive detected bursts
+                for start_idx in range(min(5, len(burst_positions) - 3)):
+                    for offset in range(-5, 6):
+                        data_bursts = []
+                        success = True
+                        
+                        for i in range(4):
+                            if start_idx + i >= len(burst_positions):
+                                success = False
+                                break
+                            
+                            pos = burst_positions[start_idx + i]
+                            burst_start = pos - 61 + offset
+                            
+                            if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                                burst = demod_bits[burst_start:burst_start + 148]
+                                try:
+                                    data114 = extract_burst_data_114(burst)
+                                    data_bursts.append(data114)
+                                except:
+                                    success = False
+                                    break
+                            else:
+                                success = False
+                                break
+                        
+                        if success and len(data_bursts) == 4:
+                            try:
+                                info_bits, valid = decode_bcch_pipeline(data_bursts)
+                                
+                                if valid:
+                                    print(f"  Phase {phase_idx}: BCCH decoded successfully (TSC correlation, start_idx={start_idx}, offset={offset:+d})!")
+                                    best_valid = True
+                                    best_info_bits = info_bits
+                                    best_phase = phase_idx
+                                    break
+                            except Exception:
+                                pass
+                    
+                    if best_valid:
+                        break
+        
+        if best_valid:
+            break
+        
+        # If direct decoding failed, try SCH-based detection
+        sch_positions = detect_sch_burst(demod_bits, threshold=0.5)
+        
+        if sch_positions:
+            # Try to decode SCH
+            sch_pos = sch_positions[0]
+            if sch_pos >= 42:
+                sch_burst = demod_bits[sch_pos-42:sch_pos+106]
+                if len(sch_burst) >= 148:
+                    left_data, right_data = extract_sch_data(sch_burst)
+                    sch39 = left_data
+                    bsic, fn, valid = decode_sch_39bits(sch39)
+                    
+                    if valid and not best_valid:
+                        print(f"  Phase {phase_idx}: SCH decoded (BSIC={bsic}, FN={fn})")
+        
+        # Try multiple thresholds for burst detection
+        for threshold in [0.6, 0.55, 0.5, 0.45]:
+            burst_positions = detect_burst_by_tsc(demod_bits, tsc_index=tsc_index, threshold=threshold)
+            
+            if len(burst_positions) >= 4:
+                # Try different starting positions (skip FCCH/SCH if detected)
+                for start_idx in range(min(3, len(burst_positions) - 3)):
+                    # Try small offsets around detected position
+                    for offset in range(-5, 6):
+                        data_bursts = []
+                        success = True
+                        
+                        for i in range(4):
+                            if start_idx + i >= len(burst_positions):
+                                success = False
+                                break
+                            
+                            pos = burst_positions[start_idx + i]
+                            burst_start = pos - 61 + offset
+                            
+                            if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                                burst = demod_bits[burst_start:burst_start + 148]
+                                data114 = extract_burst_data_114(burst)
+                                data_bursts.append(data114)
+                            else:
+                                success = False
+                                break
+                        
+                        if success and len(data_bursts) == 4:
+                            # Try to decode BCCH
+                            try:
+                                info_bits, valid = decode_bcch_pipeline(data_bursts)
+                                
+                                if valid and not best_valid:
+                                    print(f"  Phase {phase_idx}: BCCH decoded successfully (threshold={threshold}, start_idx={start_idx}, offset={offset:+d})!")
+                                    best_valid = True
+                                    best_info_bits = info_bits
+                                    best_phase = phase_idx
+                                    break
+                            except Exception:
+                                pass
+                    
+                    if best_valid:
+                        break
                 
-                # Display formatted BCCH content
-                formatted_content = format_bcch_content(info_bits)
-                print(formatted_content)
-            else:
-                print(f"  ✗ BCCH decoding failed (parity check failed)")
-                print(f"  This may be due to:")
-                print(f"    - Noise in the signal")
-                print(f"    - Incorrect burst alignment")
-                print(f"    - Wrong TSC index")
-        else:
-            print(f"Could not extract 4 complete bursts")
+                if best_valid:
+                    break
+            
+            if best_valid:
+                break
+        
+        # If TSC detection failed, try timing-based approach using SCH position
+        # This assumes guard_samples=0 in waveform generation
+        if not best_valid and sch_positions:
+            sch_pos = sch_positions[0]
+            # SCH TSC center is at sch_pos, so SCH starts at sch_pos - 61
+            sch_start = sch_pos - 61
+            
+            # With guard_samples=0, bursts are back-to-back
+            # First normal burst starts immediately after SCH
+            first_normal_start = sch_start + 148
+            
+            # Try small offsets to account for demodulation alignment
+            for offset in range(-5, 6):
+                data_bursts = []
+                success = True
+                
+                for i in range(4):
+                    burst_start = first_normal_start + offset + i * 148
+                    
+                    if burst_start >= 0 and burst_start + 148 <= len(demod_bits):
+                        burst = demod_bits[burst_start:burst_start + 148]
+                        try:
+                            data114 = extract_burst_data_114(burst)
+                            data_bursts.append(data114)
+                        except:
+                            success = False
+                            break
+                    else:
+                        success = False
+                        break
+                
+                if success and len(data_bursts) == 4:
+                    try:
+                        info_bits, valid = decode_bcch_pipeline(data_bursts)
+                        
+                        if valid:
+                            print(f"  Phase {phase_idx}: BCCH decoded successfully (timing-based, offset={offset:+d})!")
+                            best_valid = True
+                            best_info_bits = info_bits
+                            best_phase = phase_idx
+                            break
+                    except Exception:
+                        pass
+        
+        if best_valid:
+            break
+    
+    print()
+    
+    # 4. Display results
+    if best_valid:
+        print("=" * 60)
+        print(f"Successfully decoded using phase {best_phase}")
+        print("=" * 60)
+        print()
+        print(f"  ✓ BCCH decoded successfully!")
+        print(f"  Parity check: PASSED")
+        
+        # Display System Information if present
+        formatted_si = format_system_information(best_info_bits)
+        print(formatted_si)
+        
+        # Also display raw BCCH content for debugging
+        formatted_content = format_bcch_content(best_info_bits)
+        print(formatted_content)
     else:
-        print(f"Not enough bursts detected for BCCH decoding (need at least 4)")
+        print(f"  ✗ BCCH decoding failed in all phase alignments")
+        print(f"  This may be due to:")
+        print(f"    - Noise in the signal")
+        print(f"    - Incorrect burst alignment")
+        print(f"    - Wrong TSC index")
+        print(f"    - Wrong file format or corrupted data")
     
     print()
     print("=" * 60)

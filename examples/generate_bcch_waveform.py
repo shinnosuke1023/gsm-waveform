@@ -22,7 +22,8 @@ from gsm_waveform import (
     gmsk_modulate,
     modulate_burst_sequence,
     write_complex_iq,
-    FS_GEN
+    FS_GEN,
+    encode_system_information_type3
 )
 
 
@@ -82,34 +83,83 @@ def main():
     print("=" * 60)
     print()
     
-    # Create sample information bits (184 bits)
-    # In a real system, this would be the System Information message
-    print("Creating sample BCCH information...")
-    info_bits = np.zeros(184, dtype=np.uint8)
+    # Create System Information Type 3 message with GSM 04.08 compliant parameters
+    print("Creating System Information Type 3 message (GSM 04.08)...")
     
-    # Set some bits to create a non-trivial pattern
-    # (In reality, this would be properly formatted SI message)
-    info_bits[0:8] = [0, 1, 0, 1, 0, 1, 0, 1]  # Sample pattern
+    # Define network parameters
+    cell_identity = 12345             # Cell Identity
+    location_area_code = 100          # Location Area Code
+    mobile_country_code = 440         # MCC (Japan example: 440)
+    mobile_network_code = 10          # MNC (example: 10)
+    arfcn = 975                       # ARFCN (e.g., GSM-900 downlink)
+    neighbor_cells = [980, 985]  # Neighbor cell ARFCNs (max 2 due to 184-bit limit)
     
-    # Generate BCCH frame
-    print()
-    frame_bursts = generate_bcch_frame(
-        info_bits=info_bits,
-        bsic=10,  # Example BSIC
-        fn=0,     # Frame number
-        tsc_index=0  # Use TSC 0
+    print(f"  Cell Identity: {cell_identity}")
+    print(f"  Location Area Code: {location_area_code}")
+    print(f"  MCC: {mobile_country_code}, MNC: {mobile_network_code}")
+    print(f"  ARFCN: {arfcn}")
+    print(f"  Neighbor Cells: {neighbor_cells}")
+    
+    # Encode System Information with GSM 04.08 compliant parameters
+    info_bits = encode_system_information_type3(
+        cell_identity=cell_identity,
+        location_area_code=location_area_code,
+        mobile_country_code=mobile_country_code,
+        mobile_network_code=mobile_network_code,
+        arfcn=arfcn,
+        neighbor_cells=neighbor_cells,
+        # Use default values for other GSM 04.08 parameters
+        att=True,
+        bs_ag_blks_res=1,
+        ccch_conf=1,
+        bs_pa_mfrms=2,
+        t3212=0,
+        pwrc=False,
+        dtx=2,
+        radio_link_timeout=4,
+        cell_reselect_hysteresis=2,
+        ms_txpwr_max_cch=0,
+        rxlev_access_min=0,
+        neci=True,
+        acs=False,
+        max_retrans=1,
+        tx_integer=3,
+        cell_bar_access=False,
+        re=False,
+        acc=0xFFFF
     )
+    
+    # Generate BCCH frame with FCCH and SCH for proper synchronization
+    print()
+    print("Building BCCH frame with synchronization bursts...")
+    
+    # Encode SI through BCCH pipeline
+    encoded_456 = make_bcch_encoded_456(info_bits)
+    data_bursts = interleave_456_to_4x114(encoded_456)
+    
+    # Build synchronization bursts
+    fcch = build_fcch_burst()
+    sch = build_sch_burst(bsic=10, fn=0)
+    
+    # Build 4 normal bursts with TSC
+    tsc = get_tsc(0)  # Training Sequence Code 0
+    normal_bursts = [build_normal_burst(data, tsc) for data in data_bursts]
+    
+    # Assemble complete frame: FCCH + SCH + 4 normal bursts
+    frame_bursts = [fcch, sch] + normal_bursts
     
     print()
     print(f"Frame generated with {len(frame_bursts)} bursts:")
     print(f"  1. FCCH (frequency correction)")
-    print(f"  2. SCH (synchronization)")
-    print(f"  3-6. Normal bursts (BCCH data)")
+    print(f"  2. SCH (synchronization, BSIC=10, FN=0)")
+    print(f"  3-6. Normal bursts (BCCH data with SI Type 3)")
     print()
     
     # Modulate bursts to IQ samples
     print("Modulating bursts to GMSK IQ samples...")
-    guard_samples = 66  # ~8.25 bit periods * 8 samples/bit
+    # Note: guard_samples=0 for compatibility with System Information demodulation
+    # Guard samples can cause phase discontinuities with complex SI data patterns
+    guard_samples = 0
     iq_samples = modulate_burst_sequence(
         frame_bursts,
         guard_samples=guard_samples
